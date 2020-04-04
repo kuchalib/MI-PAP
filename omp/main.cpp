@@ -14,6 +14,9 @@ extern "C" {
 
 #define THRESHOLD 1000
 #define OMP_THRESHOLD 1000
+#define OMP_WORDS_PER_CORE 5000
+#define OMP_MAX_WORD_LEN 255
+#define OMP_DICTIONARY_THRESHOLD 100
 #define DICTIONARY_THRESHOLD 250
 #define MAX_ALPHABET_SIZE 95
 #define MAX_RULES_COUNT 5
@@ -41,6 +44,7 @@ size_t charToSubsCount;
 char * valuePlaceholder;
 int cores; 
 bool found = false; 
+bool rules2 = false; 
 
 #pragma region CPU
 void isHashEqualNew(uint32_t * hash1, uint32_t * hash2, bool * ret)
@@ -84,7 +88,7 @@ char * bruteForceStepNew(int stringLength, char * alphabet, int alphabetSize, ch
 		if (retTmp)
 		{
 			//free(hashedString);
-			return text;
+			return textStartAddress;
 		}
 		initialPermutation[0]++;
 		initialPermutation[0] %= alphabetSize;
@@ -118,14 +122,15 @@ void bruteForceStepOMP(int stringLength, char * alphabet, int alphabetSize, char
 	// pouzit uint32_t
 	
 	uint64_t countPerThread = ceil((double)count / cores);
-#pragma omp parallel
+	uint32_t hashPlaceHolderNew[4];
+#pragma omp parallel private(hashPlaceHolderNew)
 	{
 #pragma omp for schedule(dynamic) 
 
 		for (int c = 0; c < cores; c++)
 		{
 			int ID = omp_get_thread_num();
-			uint32_t hashPlaceHolderNew[4];
+			
 			uint64_t start = ID * countPerThread;
 			int * initialPermutation = (int*)malloc(stringLength * sizeof(int));
 			for (int i = 0; i < stringLength; i++)
@@ -268,6 +273,109 @@ char * subCharacter(char * word, char * begin, int len, uint32_t hash[4])
 }
 
 // Rozsireny slovnikovy utok, aplikuje pouze pravidla pridavani pismen v rozsahu minLength - maxLength za slovo, v budoucnu lze upravovat pomoci rules
+void dictionaryAttackOMP(char * dictionaryFile, uint32_t hash[4], char ** alphabet, int * alphabetSize, int * minLength, int * maxLength, int * rules, int rulesCount, char * text)
+{
+	uint32_t hashPlaceholder[4];
+
+	FILE * fp = fopen(dictionaryFile, "r");
+
+	bool retTmp = false;
+	bool end = false;
+	// alocate memory for dictionary words
+	char ** words = (char**)malloc(OMP_WORDS_PER_CORE * cores * sizeof(char*));
+	for (int i = 0; i < OMP_WORDS_PER_CORE * cores; i++)
+	{
+		words[i] = (char*)malloc(OMP_MAX_WORD_LEN + 30 * sizeof(char));
+	}
+	int maxLen = 0;
+	if (fp == NULL)
+	{
+		printf("Cant open the dictionary");
+		return;
+	}
+	char * word = (char*)malloc(255);
+	while (true)
+	{
+		uint64_t read;
+		for (read = 0; read < OMP_WORDS_PER_CORE * cores; read++)
+		{
+			if (fscanf(fp, "%256s", words[read]) == EOF)
+			{
+				end = true;
+				break;
+			}
+		}
+
+#pragma omp parallel private(hashPlaceholder)
+		{
+#pragma omp for schedule(dynamic) 
+			for (int r = 0; r < read; r++)
+			{
+				if (found)
+					break;
+				int len = strlen(words[r]);
+				if (!rules2)
+				{
+					md5(words[r], len, hashPlaceholder);
+					isHashEqualNew(hashPlaceholder, hash, &retTmp);
+					if (retTmp)
+					{
+						memcpy(text, words[r], len + 1);
+						found = true;
+						//break;
+					}
+				}
+
+				for (int i = 0; i < rulesCount; i++)
+				{
+					if (rules[i] == ADD_BACK)
+					{
+						for (int j = minLength[i]; j <= maxLength[i]; j++)
+						{
+							char * editStart = words[r] + len;
+							int finalLength = len + j;
+							editStart[j] = 0; // vynulovat konec stringu
+							int * initialPermutation = (int*)calloc(j, sizeof(int));
+							uint64_t count = pow(alphabetSize[i], j);
+							char * result = bruteForceStepNew(j, alphabet[i], alphabetSize[i], editStart, hash, initialPermutation, count, words[r], finalLength);
+							if (result != NULL)
+							{
+								memcpy(text, result, finalLength + 1);
+								found = true;
+								break;
+							}
+							// free(initialPermutation); 
+						}
+					}
+					else if (rules[i] == SUBSTITUTE)
+					{
+						char * ret = subCharacter(words[r], words[r], len, hash);
+						if (ret != NULL)
+						{
+							memcpy(text, ret, len);
+							text[len] = 0; 
+							found = true;
+							break;
+						}
+					}
+				}
+
+			}
+			bariera:
+#pragma omp barrier 
+		}
+		
+		if (found)
+			break; 
+		if (end)
+			break; 
+	}
+	
+
+	fclose(fp);
+}
+
+// Rozsireny slovnikovy utok, aplikuje pouze pravidla pridavani pismen v rozsahu minLength - maxLength za slovo, v budoucnu lze upravovat pomoci rules
 char * dictionaryAttack(char * dictionaryFile, uint32_t hash[4], char ** alphabet, int * alphabetSize, int * minLength, int * maxLength, int * rules, int rulesCount)
 {
 	uint32_t hashPlaceholder[4];
@@ -287,13 +395,16 @@ char * dictionaryAttack(char * dictionaryFile, uint32_t hash[4], char ** alphabe
 			break;
 		int len = strlen(word);
 		maxLen = MAX(maxLen, len);
-		md5(word, len, hashPlaceholder);
-		isHashEqualNew(hashPlaceholder, hash, &retTmp);
-		if (retTmp)
+		if (!rules2)
 		{
-			//free(hashedString);
-			fclose(fp);
-			return word;
+			md5(word, len, hashPlaceholder);
+			isHashEqualNew(hashPlaceholder, hash, &retTmp);
+			if (retTmp)
+			{
+				//free(hashedString);
+				fclose(fp);
+				return word;
+			}
 		}
 
 		for (int i = 0; i < rulesCount; i++)
@@ -390,9 +501,11 @@ int main(int argc, char *argv[])
 	// 0 E:\\Dictionary\slovnik.txt 1b34d880de0281139ed8d526b9462e9d 2 2 ss 5$
 	// 0 E:\\words.txt 77360f71a0c28c212111a617b90466d8 0 1 1 3
 	// 3 E:\\Dictionary\slovnik.txt b8074d446492705a6dd7d5e75aaf954f 1 0 1 1 32 128
+	// 0 E:\\Dictionary\slovnik.txt 5f4dcc3b5aa765d61d8327deb882cf99 2
 
 	uint32_t *hash;
 	char *originalString = NULL;
+	char word[OMP_MAX_WORD_LEN + 50];
 	int mode = -1;
 	int alphabetMode = -1;
 	char *_alphabet;
@@ -419,6 +532,8 @@ int main(int argc, char *argv[])
 			int argcTmp = argc;
 			if (mode == 3)
 				argcTmp -= 2;
+			else
+				--argcTmp; 
 			if (argcTmp % 4 == 0)
 			{
 
@@ -461,6 +576,7 @@ int main(int argc, char *argv[])
 							subsChar[j] = argv[i + 3][j];
 						}
 						rulesCount++;
+						rules2 = true; 
 					}
 				}
 			}
@@ -469,7 +585,23 @@ int main(int argc, char *argv[])
 		}
 		if (mode == 0)
 		{
-			originalString = dictionaryAttack(argv[2], hash, alphabet, alphabetSize, minLength, maxLength, rules, rulesCount);
+			cores = atoi(argv[rulesCount * 4 + 4]);
+			if (cores <= 0)
+			{
+				printf("invalid core count, setting core count to 1"); 
+				cores = 1;
+			}
+			omp_set_num_threads(cores);
+			if (cores == 1)
+				originalString = dictionaryAttack(argv[2], hash, alphabet, alphabetSize, minLength, maxLength, rules, rulesCount); 
+			else
+			{
+				dictionaryAttackOMP(argv[2], hash, alphabet, alphabetSize, minLength, maxLength, rules, rulesCount, word); 
+				if (found)
+				{
+					originalString = word; 
+				}
+			}
 		}
 		else if (mode == 3)
 		{
