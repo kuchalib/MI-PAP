@@ -1,8 +1,8 @@
-log_file="omp-dict.txt"
+log_file="omp-dictVec.txt"
 alphabets=(4 4 16)
-rules = (1 1 2)
-min=(2 4 "eariotnsEARIOTNS")
-max=(2 4 "EARIOTNSeariotns")
+rules=(1 1 2)
+min=(2 2 "eariotnsEARIOTNS")
+max=(2 2 "EARIOTNSeariotns")
 original_values=("napalm5e" "azotemic9S", "lupuSErythemAToSus")
 hashes=("bd14a2ab2d51782968669b68b17d909f" "b4ba89b4d21e4b5886c8dae0657396d6" "04afd29e779eb8522ec606d7346b7ae7")
 

@@ -1,4 +1,4 @@
-log_file="omp-brut.txt"
+log_file="omp-brutVec.txt"
 alphabets=(4, 4, 5, 5)
 min=(5, 4, 4, 4)
 max=(5, 4, 4, 5)
