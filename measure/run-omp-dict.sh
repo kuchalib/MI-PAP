@@ -14,7 +14,7 @@ for n in 0 1 2; do
     for t in 12 10 8 6 4 2
     do
             START=$(date +%s.%N)
-            echo -n "$(./a.out 3 words.txt ${hashes[$n]} ${rules[$n]} ${alphabets[$n]} ${min[$n]} ${max[$n]} $t})" >> $log_file
+            echo -n "$(./a.out 0 words.txt ${hashes[$n]} ${rules[$n]} ${alphabets[$n]} ${min[$n]} ${max[$n]} $t})" >> $log_file
             END=$(date +%s.%N)
             DIFF=$(echo "$END - $START" | bc)
             echo ";${t};${DIFF}" >> $log_file

@@ -312,7 +312,7 @@ void dictionaryAttackOMP(char * dictionaryFile, uint32_t hash[4], char ** alphab
 			for (int r = 0; r < read; r++)
 			{
 				if (found)
-					break;
+					continue;
 				int len = strlen(words[r]);
 				if (!rules2)
 				{
@@ -361,8 +361,6 @@ void dictionaryAttackOMP(char * dictionaryFile, uint32_t hash[4], char ** alphab
 				}
 
 			}
-			bariera:
-#pragma omp barrier 
 		}
 		
 		if (found)

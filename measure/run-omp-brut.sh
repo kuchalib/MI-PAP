@@ -13,7 +13,7 @@ for n in 0 1 2 3; do
     for t in 2 4 6 8 10 12
     do
       START=$(date +%s.%N)
-      echo -n "$(./a.out 2 ${alphabets[$n]} ${hashes[$n]} ${min[$n]} ${max[$n]} $t})" >> $log_file
+      echo -n "$(./a.out 1 ${alphabets[$n]} ${hashes[$n]} ${min[$n]} ${max[$n]} $t})" >> $log_file
       END=$(date +%s.%N)
       DIFF=$(echo "$END - $START" | bc)
       echo ";${t};${DIFF}" >> $log_file
